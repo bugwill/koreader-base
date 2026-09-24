@@ -279,6 +279,8 @@ pdf_annot *mupdf_pdf_create_annot(fz_context *, pdf_page *, enum pdf_annot_type)
 bool mupdf_pdf_delete_annot(fz_context *, pdf_page *, pdf_annot *);
 bool mupdf_pdf_set_annot_quad_points(fz_context *, pdf_annot *, int, const fz_quad *);
 bool mupdf_pdf_set_annot_contents(fz_context *, pdf_annot *, const char *);
+bool mupdf_pdf_set_annot_name(fz_context *, pdf_annot *, const char *);
+const char *mupdf_pdf_annot_name(fz_context *, pdf_annot *);
 bool mupdf_pdf_set_annot_color(fz_context *, pdf_annot *, int, const float[4]);
 bool mupdf_pdf_set_annot_opacity(fz_context *, pdf_annot *, float);
 bool mupdf_pdf_set_annot_ink_list(fz_context *, pdf_annot *, int, const int *, const fz_point *);
@@ -288,6 +290,12 @@ pdf_annot *mupdf_pdf_first_annot(fz_context *, pdf_page *);
 pdf_annot *mupdf_pdf_next_annot(fz_context *, pdf_annot *);
 int mupdf_pdf_annot_quad_point_count(fz_context *, pdf_annot *);
 bool mupdf_pdf_annot_quad_point(fz_context *, pdf_annot *, int, fz_quad *);
+int mupdf_pdf_annot_ink_list_count(fz_context *, pdf_annot *);
+int mupdf_pdf_annot_ink_list_stroke_count(fz_context *, pdf_annot *, int);
+bool mupdf_pdf_annot_ink_list_stroke_vertex(fz_context *, pdf_annot *, int, int, fz_point *);
+bool mupdf_pdf_annot_color(fz_context *, pdf_annot *, int *, float[4]);
+float mupdf_pdf_annot_border_width(fz_context *, pdf_annot *);
+float mupdf_pdf_annot_opacity(fz_context *, pdf_annot *);
 typedef struct {
   int do_incremental;
   int do_pretty;

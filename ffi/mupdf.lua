@@ -822,7 +822,7 @@ end
 --   bb_color: { r, g, b } components 0-255.
 --   width   : ink border (line) width in points.
 --   opacity : 0..1.
-function page_mt.__index:addInkAnnotation(strokes, bb_color, width, opacity)
+function page_mt.__index:addInkAnnotation(strokes, bb_color, width, opacity, name)
     local n = #strokes
     if n == 0 then return end
 
@@ -868,6 +868,89 @@ function page_mt.__index:addInkAnnotation(strokes, bb_color, width, opacity)
     -- annotation is invisible in desktop PDF viewers (Preview, Acrobat, ...).
     ok = W.mupdf_pdf_update_annot(self.ctx, annot)
     if not ok then merror(self.ctx, "could not update ink annotation") end
+
+    if name then
+        ok = W.mupdf_pdf_set_annot_name(self.ctx, annot, name)
+        if not ok then merror(self.ctx, "could not set ink annotation name") end
+    end
+    return annot
+end
+
+function page_mt.__index:getInkAnnotationsWithNamePrefix(prefix)
+    local annotations = {}
+    local annot = W.mupdf_pdf_first_annot(self.ctx, ffi.cast("pdf_page*", self.page))
+    while annot ~= nil do
+        if W.mupdf_pdf_annot_type(self.ctx, annot) == M.PDF_ANNOT_INK then
+            local name = W.mupdf_pdf_annot_name(self.ctx, annot)
+            if name ~= nil then
+                name = ffi.string(name)
+                if name:sub(1, #prefix) == prefix then
+                    annotations[#annotations + 1] = { annot = annot, name = name }
+                end
+            end
+        end
+        annot = W.mupdf_pdf_next_annot(self.ctx, annot)
+    end
+    return annotations
+end
+
+--[[--
+Read all ink annotations of this page.
+
+Returns a list of `{ annot, name, strokes, color, width, opacity }`: `strokes` is
+a list of point lists (`{ {x=, y=}, ... }`) in page space (the same space
+addInkAnnotation takes), `color` is `{ r, g, b }` in 0..255 (nil if the
+annotation has no RGB/gray color), `name` the /NM entry (nil if absent).
+Annotations whose ink list cannot be read are skipped.
+--]]
+function page_mt.__index:getInkAnnotations()
+    local annotations = {}
+    local point = ffi.new("fz_point[1]")
+    local color = ffi.new("float[4]")
+    local ncolor = ffi.new("int[1]")
+    local annot = W.mupdf_pdf_first_annot(self.ctx, ffi.cast("pdf_page*", self.page))
+    while annot ~= nil do
+        if W.mupdf_pdf_annot_type(self.ctx, annot) == M.PDF_ANNOT_INK then
+            local strokes = {}
+            local stroke_count = W.mupdf_pdf_annot_ink_list_count(self.ctx, annot)
+            for i = 0, stroke_count - 1 do
+                local vertex_count = W.mupdf_pdf_annot_ink_list_stroke_count(self.ctx, annot, i)
+                local stroke = {}
+                for k = 0, vertex_count - 1 do
+                    if W.mupdf_pdf_annot_ink_list_stroke_vertex(self.ctx, annot, i, k, point) then
+                        stroke[#stroke + 1] = { x = point[0].x, y = point[0].y }
+                    end
+                end
+                if #stroke > 0 then
+                    strokes[#strokes + 1] = stroke
+                end
+            end
+            if #strokes > 0 then
+                local rgb
+                ncolor[0] = 0
+                if W.mupdf_pdf_annot_color(self.ctx, annot, ncolor, color) then
+                    if ncolor[0] == 3 then
+                        rgb = { r = color[0] * 255, g = color[1] * 255, b = color[2] * 255 }
+                    elseif ncolor[0] == 1 then
+                        rgb = { r = color[0] * 255, g = color[0] * 255, b = color[0] * 255 }
+                    end
+                end
+                local name = W.mupdf_pdf_annot_name(self.ctx, annot)
+                local width = W.mupdf_pdf_annot_border_width(self.ctx, annot)
+                local opacity = W.mupdf_pdf_annot_opacity(self.ctx, annot)
+                annotations[#annotations + 1] = {
+                    annot = annot,
+                    name = name ~= nil and ffi.string(name) or nil,
+                    strokes = strokes,
+                    color = rgb,
+                    width = width > 0 and width or 1,
+                    opacity = opacity >= 0 and opacity or 1,
+                }
+            end
+        end
+        annot = W.mupdf_pdf_next_annot(self.ctx, annot)
+    end
+    return annotations
 end
 
 function page_mt.__index:deleteAnnotation(annot)
@@ -884,14 +967,18 @@ function page_mt.__index:getMarkupAnnotation(points, n)
             local match = true
             for i = 0, n-1 do
                 W.mupdf_pdf_annot_quad_point(self.ctx, annot, i, quadpoint)
-                if (points[i].ul.x ~= quadpoint[0].ul.x or
-                    points[i].ul.y ~= quadpoint[0].ul.y or
-                    points[i].ur.x ~= quadpoint[0].ur.x or
-                    points[i].ur.y ~= quadpoint[0].ur.y or
-                    points[i].ll.x ~= quadpoint[0].ll.x or
-                    points[i].ll.y ~= quadpoint[0].ll.y or
-                    points[i].lr.x ~= quadpoint[0].lr.x or
-                    points[i].lr.y ~= quadpoint[0].lr.y) then
+                -- Coordinates may be rounded when converted between PDF quadpoints
+                -- and KOReader pboxes; don't lose track of a matching annotation
+                -- because of a tiny floating-point difference.
+                local tolerance = 0.01
+                if (math.abs(points[i].ul.x - quadpoint[0].ul.x) > tolerance or
+                    math.abs(points[i].ul.y - quadpoint[0].ul.y) > tolerance or
+                    math.abs(points[i].ur.x - quadpoint[0].ur.x) > tolerance or
+                    math.abs(points[i].ur.y - quadpoint[0].ur.y) > tolerance or
+                    math.abs(points[i].ll.x - quadpoint[0].ll.x) > tolerance or
+                    math.abs(points[i].ll.y - quadpoint[0].ll.y) > tolerance or
+                    math.abs(points[i].lr.x - quadpoint[0].lr.x) > tolerance or
+                    math.abs(points[i].lr.y - quadpoint[0].lr.y) > tolerance) then
                     match = false
                     break
                 end

@@ -176,6 +176,13 @@ MUPDF_WRAP_BOOL(mupdf_pdf_set_annot_quad_points,
 MUPDF_WRAP_BOOL(mupdf_pdf_set_annot_contents,
     pdf_set_annot_contents(ctx, annot, text),
     pdf_annot *annot, const char *text)
+MUPDF_WRAP_BOOL(mupdf_pdf_set_annot_name,
+    pdf_dict_puts_drop(ctx, pdf_annot_obj(ctx, annot), "NM", pdf_new_text_string(ctx, name)),
+    pdf_annot *annot, const char *name)
+MUPDF_WRAP(mupdf_pdf_annot_name, const char *, NULL,
+    { pdf_obj *name = pdf_dict_gets(ctx, pdf_annot_obj(ctx, annot), "NM");
+      ret = name ? pdf_to_text_string(ctx, name) : NULL; },
+    pdf_annot *annot)
 MUPDF_WRAP(mupdf_pdf_first_annot, pdf_annot*, NULL,
      ret = pdf_first_annot(ctx, page),
      pdf_page *page)
@@ -188,6 +195,24 @@ MUPDF_WRAP(mupdf_pdf_annot_quad_point_count, int, -1,
 MUPDF_WRAP_BOOL(mupdf_pdf_annot_quad_point,
     *qv = pdf_annot_quad_point(ctx, annot, i),
     pdf_annot *annot, int i, fz_quad *qv)
+MUPDF_WRAP(mupdf_pdf_annot_ink_list_count, int, -1,
+     ret = pdf_annot_ink_list_count(ctx, annot),
+     pdf_annot *annot)
+MUPDF_WRAP(mupdf_pdf_annot_ink_list_stroke_count, int, -1,
+     ret = pdf_annot_ink_list_stroke_count(ctx, annot, i),
+     pdf_annot *annot, int i)
+MUPDF_WRAP_BOOL(mupdf_pdf_annot_ink_list_stroke_vertex,
+    *v = pdf_annot_ink_list_stroke_vertex(ctx, annot, i, k),
+    pdf_annot *annot, int i, int k, fz_point *v)
+MUPDF_WRAP_BOOL(mupdf_pdf_annot_color,
+    pdf_annot_color(ctx, annot, n, color),
+    pdf_annot *annot, int *n, float color[4])
+MUPDF_WRAP(mupdf_pdf_annot_border_width, float, -1,
+     ret = pdf_annot_border_width(ctx, annot),
+     pdf_annot *annot)
+MUPDF_WRAP(mupdf_pdf_annot_opacity, float, -1,
+     ret = pdf_annot_opacity(ctx, annot),
+     pdf_annot *annot)
 MUPDF_WRAP_BOOL(mupdf_pdf_set_annot_color,
     pdf_set_annot_color(ctx, annot, n, color),
     pdf_annot *annot, int n, const float color[4])
@@ -215,4 +240,3 @@ MUPDF_WRAP(mupdf_new_image_from_buffer, fz_image*, NULL,
 MUPDF_WRAP(mupdf_new_buffer_from_shared_data, fz_buffer*, NULL,
     ret = fz_new_buffer_from_shared_data(ctx, data, size),
     const unsigned char *data, size_t size)
-
