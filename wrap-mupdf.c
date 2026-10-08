@@ -266,6 +266,83 @@ int page_has_transparency_mask(fz_context* ctx, fz_page* p)
     return 0;
 }
 
+/*
+ * Invert every color of a PDF page in its content: paint the page box white
+ * below the original content, then paint it white again on top of it with the
+ * Difference blend mode. Annotations are drawn after the page content and keep
+ * their colors.
+ */
+void invert_pdf_page_colors(fz_context *ctx, pdf_document *doc, int page_no)
+{
+    pdf_obj *page = pdf_lookup_page_obj(ctx, doc, page_no);
+    fz_rect box = pdf_to_rect(ctx, pdf_dict_get_inheritable(ctx, page, PDF_NAME(MediaBox)));
+    if (fz_is_empty_rect(box)) {
+        box = fz_make_rect(0, 0, 612, 792);
+    }
+
+    pdf_obj *resources = pdf_dict_get_inheritable(ctx, page, PDF_NAME(Resources));
+    if (!resources) {
+        resources = pdf_dict_put_dict(ctx, page, PDF_NAME(Resources), 1);
+    }
+    pdf_obj *ext_g_states = pdf_dict_get(ctx, resources, PDF_NAME(ExtGState));
+    if (!ext_g_states) {
+        ext_g_states = pdf_dict_put_dict(ctx, resources, PDF_NAME(ExtGState), 1);
+    }
+
+    fz_buffer *before = NULL;
+    fz_buffer *after = NULL;
+    pdf_obj *gs = NULL;
+    pdf_obj *before_ref = NULL;
+    pdf_obj *after_ref = NULL;
+    pdf_obj *contents = NULL;
+    fz_var(before);
+    fz_var(after);
+    fz_var(gs);
+    fz_var(before_ref);
+    fz_var(after_ref);
+    fz_var(contents);
+    fz_try(ctx) {
+        gs = pdf_new_dict(ctx, doc, 2);
+        pdf_dict_put(ctx, gs, PDF_NAME(Type), PDF_NAME(ExtGState));
+        pdf_dict_put_name(ctx, gs, PDF_NAME(BM), "Difference");
+        pdf_dict_puts(ctx, ext_g_states, "KOReaderInvert", gs);
+
+        float w = box.x1 - box.x0;
+        float h = box.y1 - box.y0;
+        before = fz_new_buffer(ctx, 64);
+        fz_append_printf(ctx, before, "q 1 1 1 rg %g %g %g %g re f Q\nq\n", box.x0, box.y0, w, h);
+        after = fz_new_buffer(ctx, 96);
+        fz_append_printf(ctx, after, "\nQ\nq /KOReaderInvert gs 1 1 1 rg %g %g %g %g re f Q\n", box.x0, box.y0, w, h);
+        before_ref = pdf_add_stream(ctx, doc, before, NULL, 0);
+        after_ref = pdf_add_stream(ctx, doc, after, NULL, 0);
+
+        pdf_obj *old_contents = pdf_dict_get(ctx, page, PDF_NAME(Contents));
+        contents = pdf_new_array(ctx, doc, 3);
+        pdf_array_push(ctx, contents, before_ref);
+        if (pdf_is_array(ctx, old_contents)) {
+            int n = pdf_array_len(ctx, old_contents);
+            for (int i = 0; i < n; i++) {
+                pdf_array_push(ctx, contents, pdf_array_get(ctx, old_contents, i));
+            }
+        } else if (old_contents) {
+            pdf_array_push(ctx, contents, old_contents);
+        }
+        pdf_array_push(ctx, contents, after_ref);
+        pdf_dict_put(ctx, page, PDF_NAME(Contents), contents);
+    }
+    fz_always(ctx) {
+        pdf_drop_obj(ctx, contents);
+        pdf_drop_obj(ctx, after_ref);
+        pdf_drop_obj(ctx, before_ref);
+        pdf_drop_obj(ctx, gs);
+        fz_drop_buffer(ctx, after);
+        fz_drop_buffer(ctx, before);
+    }
+    fz_catch(ctx) {
+        fz_rethrow(ctx);
+    }
+}
+
 /* wrappers for functions that throw exceptions mupdf-style (setjmp/longjmp) */
 
 #define MUPDF_DO_WRAP

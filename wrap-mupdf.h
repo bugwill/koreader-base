@@ -213,6 +213,9 @@ MUPDF_WRAP(mupdf_pdf_annot_border_width, float, -1,
 MUPDF_WRAP(mupdf_pdf_annot_opacity, float, -1,
      ret = pdf_annot_opacity(ctx, annot),
      pdf_annot *annot)
+MUPDF_WRAP_BOOL(mupdf_pdf_invert_page_colors,
+    invert_pdf_page_colors(ctx, doc, page_no),
+    pdf_document *doc, int page_no)
 MUPDF_WRAP_BOOL(mupdf_pdf_set_annot_color,
     pdf_set_annot_color(ctx, annot, n, color),
     pdf_annot *annot, int n, const float color[4])

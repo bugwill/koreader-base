@@ -361,6 +361,18 @@ function document_mt.__index:writeDocument(filename)
 end
 
 
+--[[
+invert the colors of all pages' content, e.g. before writing a copy of the document
+--]]
+function document_mt.__index:invertColors()
+    local pdf_doc = ffi.cast("pdf_document*", self.doc)
+    for page_no = 0, self:getPages() - 1 do
+        if not W.mupdf_pdf_invert_page_colors(self.ctx, pdf_doc, page_no) then
+            merror(self.ctx, "could not invert page colors")
+        end
+    end
+end
+
 -- Page functions:
 
 --[[
